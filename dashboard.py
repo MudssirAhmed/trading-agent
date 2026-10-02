@@ -2,10 +2,39 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+import json
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="AI Trading Agent Dashboard", layout="wide")
 st.title("🤖 AI Trading Agent Performance")
+
+# --- LIVE ONGOING TRADE STATUS ---
+st.subheader("📡 Live Position Status")
+
+if os.path.exists("active_trade.json"):
+    try:
+        with open("active_trade.json", "r") as f:
+            trade_data = json.load(f)
+            
+        action = trade_data.get('action', 'TRADE')
+        symbol = trade_data.get('context', {}).get('symbol', 'BTC/USDT')
+        entry = trade_data.get('entry_price', 0)
+        tp = trade_data.get('take_profit', 0)
+        sl = trade_data.get('stop_loss', 0)
+
+        # Highlight ongoing trade in a prominent alert card
+        st.warning(f"🚨 **ACTIVE {action} POSITION:** {symbol}")
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Entry Price", f"${entry:,.2f}")
+        c2.metric("Take Profit", f"${tp:,.2f}")
+        c3.metric("Stop Loss", f"${sl:,.2f}")
+    except Exception as e:
+        st.info("No active trades currently open. Scanning markets...")
+else:
+    st.info("🟢 No active trades currently open. Market scanner is active...")
+
+st.markdown("---")
 
 # --- LOAD DATA ---
 @st.cache_data(ttl=60) # Refreshes data every 60 seconds automatically
@@ -20,7 +49,7 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.warning("No trades recorded yet. The dashboard will populate once the bot closes its first trade.")
+    st.warning("No closed trades recorded yet. Performance charts and historical logs will populate once the bot closes its first trade.")
 else:
     # --- TOP METRICS ---
     total_trades = len(df)
@@ -44,14 +73,14 @@ else:
         # Interactive Plotly Line Chart
         fig_equity = px.line(df, x='Date', y='Cumulative_PnL', markers=True, 
                              title="Profit Growth Over Time",
-                             color_discrete_sequence=["#00ff00" if total_profit >=0 else "#ff0000"])
+                             color_discrete_sequence=["#00ff00" if total_profit >= 0 else "#ff0000"])
         st.plotly_chart(fig_equity, use_container_width=True)
         
     with col2:
         st.subheader("Win / Loss Ratio")
         # Interactive Plotly Pie Chart
         fig_pie = px.pie(df, names='Outcome', title="Trade Outcomes",
-                         color='Outcome', color_discrete_map={'WIN':'#00b050', 'LOSS':'#ff0000'})
+                         color='Outcome', color_discrete_map={'WIN': '#00b050', 'LOSS': '#ff0000'})
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
@@ -70,7 +99,6 @@ else:
     filtered_df = df[(df['Action'].isin(action_filter)) & (df['Outcome'].isin(outcome_filter))]
     
     # Render the interactive dataframe
-    # Streamlit dataframes natively support clicking column headers to sort!
     st.dataframe(
         filtered_df[['Date', 'Symbol', 'Action', 'Entry_Price', 'Exit_Price', 'Outcome', 'PnL_USD']].sort_values(by="Date", ascending=False),
         use_container_width=True,

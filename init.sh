@@ -21,6 +21,7 @@ if [ -d "chroma_db" ]; then cp -a chroma_db "$backup_dir/"; fi
 if [ -d "experience_db" ]; then cp -a experience_db "$backup_dir/"; fi
 if [ -f "trade_history.csv" ]; then cp trade_history.csv "$backup_dir/"; fi
 if [ -f ".env" ]; then cp .env "$backup_dir/"; fi
+if [ -f "active_trade.json" ]; then cp active_trade.json "$backup_dir/"; fi
 
 keep_backup_on_failure() {
     if [ -d "$backup_dir" ]; then
@@ -39,6 +40,7 @@ if [ -d "$backup_dir/chroma_db" ]; then cp -a "$backup_dir/chroma_db" ./; fi
 if [ -d "$backup_dir/experience_db" ]; then cp -a "$backup_dir/experience_db" ./; fi
 if [ -f "$backup_dir/trade_history.csv" ]; then cp "$backup_dir/trade_history.csv" ./; fi
 if [ -f "$backup_dir/.env" ]; then cp "$backup_dir/.env" ./; fi
+if [ -f "$backup_dir/active_trade.json" ]; then cp "$backup_dir/active_trade.json" ./; fi
 rm -rf "$backup_dir"
 trap - EXIT
 

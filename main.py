@@ -1,6 +1,7 @@
 import time
 import os
 import csv
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 from data_fetcher import get_multi_timeframe_state
@@ -11,6 +12,17 @@ from notifier import send_telegram_alert
 load_dotenv()
 
 active_trade = None
+TRADE_FILE = "active_trade.json"
+
+def save_active_trade(trade_data):
+    """Saves the active trade to disk for reboot recovery and dashboard viewing."""
+    with open(TRADE_FILE, "w") as f:
+        json.dump(trade_data, f)
+
+def clear_active_trade():
+    """Removes the active trade file when a trade closes."""
+    if os.path.exists(TRADE_FILE):
+        os.remove(TRADE_FILE)
 
 def log_trade_to_csv(trade_context, final_price, outcome_type):
     """Logs the math of a closed trade to a CSV file for the dashboard."""
@@ -88,8 +100,9 @@ def monitor_trade(current_price):
         )
         send_telegram_alert(alert_body)
         
-        # 4. Clear trade state
+        # 4. Clear trade state from memory and disk
         active_trade = None
+        clear_active_trade()
         return True
         
     return False
@@ -122,11 +135,10 @@ def bot_loop():
         print(f"\n[DECISION] {decision['action']} (Confidence: {decision['confidence']}%)")
         print(f"[REASONING] {decision['reasoning']}")
         
-       # 6. Execute Alert (Lowered threshold to 70 for testing)
+       # 6. Execute Alert
         if decision['action'] != "HOLD" and decision['confidence'] >= 85:
             print(f"\n🚀 EXECUTING {decision['action']} ENTRY AT ${decision['entry_price']}")
             
-            # Using HTML tags <b> instead of Markdown asterisks *
             trade_msg = (
                 f"🚨 <b>AI TRADE SIGNAL: {decision['action']} BTC</b> 🚨\n\n"
                 f"<b>Confidence:</b> {decision['confidence']}%\n"
@@ -147,9 +159,36 @@ def bot_loop():
                 "take_profit": decision['take_profit'],
                 "context": {"symbol": state['symbol'], "state": state, "decision": decision}
             }
+            
+            # Save trade state to disk immediately
+            save_active_trade(active_trade)
+
+def startup_check():
+    """Checks for existing trades on boot and notifies Telegram."""
+    global active_trade
+    if os.path.exists(TRADE_FILE):
+        try:
+            with open(TRADE_FILE, "r") as f:
+                active_trade = json.load(f)
+            
+            recovery_msg = (
+                f"🔄 <b>System Restarted</b>\n"
+                f"Recovered ongoing <b>{active_trade['action']}</b> trade for "
+                f"<b>{active_trade['context']['symbol']}</b> at <b>${active_trade['entry_price']:,.2f}</b>. "
+                f"Resuming monitoring..."
+            )
+            send_telegram_alert(recovery_msg)
+            print("⚠️ Recovered an ongoing trade from disk!")
+        except Exception as e:
+            print(f"Failed to load active trade: {e}")
+            active_trade = None
+            send_telegram_alert("🤖 <b>AI Trading Engine Initialized.</b> Running multi-timeframe analysis every 5 minutes...")
+    else:
+        send_telegram_alert("🤖 <b>AI Trading Engine Initialized.</b> Running multi-timeframe analysis every 5 minutes...")
 
 if __name__ == "__main__":
-    send_telegram_alert("🤖 *AI Trading Engine Initialized.* Running multi-timeframe analysis every 5 minutes...")
+    startup_check()
+    
     while True:
         try:
             bot_loop()

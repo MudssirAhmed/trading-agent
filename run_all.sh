@@ -10,16 +10,16 @@ echo "🤖 Starting Trading Agent (main.py)..."
 python main.py &
 BOT_PID=$!
 
-# 3. Start the Streamlit dashboard in the background
+# 3. Start the Streamlit dashboard in headless background mode
 echo "📊 Starting Dashboard (dashboard.py)..."
-streamlit run dashboard.py &
+python -m streamlit run dashboard.py --server.headless true --server.port 8501 &
 DASHBOARD_PID=$!
 
 # 4. Catch the Ctrl+C command to safely kill both background processes
 trap "echo -e '\n🛑 Shutting down Trading Agent and Dashboard...'; kill $BOT_PID $DASHBOARD_PID; exit" SIGINT SIGTERM
 
 echo "✅ Both applications are running!"
-echo "👉 Dashboard is live at: http://localhost:8501"
+echo "👉 Dashboard is live on Port 8501"
 echo "Press Ctrl+C at any time to stop everything."
 
 # Keep the script running and wait for user interruption

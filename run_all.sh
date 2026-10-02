@@ -12,7 +12,7 @@ BOT_PID=$!
 
 # 3. Start the Streamlit dashboard in headless background mode
 echo "📊 Starting Dashboard (dashboard.py)..."
-python -m streamlit run dashboard.py --server.headless true --server.port 8501 &
+python -m streamlit run dashboard.py --server.headless true --server.address 0.0.0.0 --server.port 8501 &
 DASHBOARD_PID=$!
 
 # 4. Catch the Ctrl+C command to safely kill both background processes

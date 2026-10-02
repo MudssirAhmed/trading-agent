@@ -1,73 +1,70 @@
-# AI Crypto Trading Agent (RAG-Powered)
+# AI Crypto Trading Agent
 
-This project is a sophisticated, multi-timeframe algorithmic trading agent. Rather than relying on simple technical indicators or hallucination-prone AI prompts, it uses a **Retrieval-Augmented Generation (RAG)** architecture. 
+This project is a multi-timeframe algorithmic trading agent using a **Retrieval-Augmented Generation (RAG)** architecture and an **Experience Loop**.
 
-The AI references a local vector database built from foundational technical analysis books (e.g., John Murphy, Steve Nison) to make highly calculated, mathematically sound trading decisions.
+The AI references a local vector database built from technical analysis books to make mathematically sound trading decisions, and maintains an Experience Database to learn from past trades through a Critic AI reflection loop.
 
 ## Architecture Overview
 
-The system runs on a **5-Minute Cron Pipeline**:
-1. **Multi-Timeframe Analysis (MTFA):** Fetches 1D, 1H, 15m, and 5m OHLCV data to establish macro trend and micro entry triggers.
-2. **Sentiment Analysis:** Integrates global news APIs to validate technical breakouts.
-3. **RAG Knowledge Base:** Queries a local ChromaDB containing embedded trading books for historical precedent on the current setup.
-4. **AI Synthesizer:** An LLM processes the technicals, sentiment, and book excerpts to propose a trade.
-5. **Hard-Coded Risk Manager:** A mathematical circuit breaker that calculates position sizing (1% risk) and verifies R:R before executing via Exchange API or Telegram alert.
-
-## Prerequisites (macOS)
-
-Do not use the built-in macOS Python, as it comes with an outdated SQLite version that is incompatible with ChromaDB.
-
-1. Install Homebrew (if you haven't already):
-   `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-2. Install a modern version of Python:
-   `brew install python@3.11`
+The system runs on a continuous **5-Minute Pipeline**:
+1. **Multi-Timeframe Analysis (MTFA):** Fetches 1D, 1H, 5m, and 1m OHLCV data via `ccxt` (Binance) to establish macro trend and micro entry triggers.
+2. **RAG Knowledge Base & Experience DB:** Queries a local ChromaDB containing embedded trading books for historical precedent, and checks past trade reflections to avoid repeating mistakes.
+3. **AI Synthesizer:** An LLM (GPT-4o-mini) processes the technicals, theory, and past experience to propose a trade with calculated confidence, stop-loss, and take-profit.
+4. **Execution & Monitoring:** The system logs trades to a local JSON file, tracks performance, and monitors for stop-loss/take-profit hits.
+5. **Dashboard & Alerts:** A Streamlit dashboard tracks the equity curve and win rate, while a Telegram bot sends real-time entry and exit alerts.
 
 ## Setup Instructions
 
-1. **Create the project directory:**
+1. **Clone and create a virtual environment:**
    ```bash
-   mkdir ai-trading-agent
-   cd ai-trading-agent
-   ```
-
-2. **Set up a Virtual Environment:**
-   ```bash
-   python3.11 -m venv venv
+   python3 -m venv venv
    source venv/bin/activate
    ```
 
-3. **Install Dependencies:**
-   Install the required LangChain packages, vector database, and the necessary async patches:
+2. **Install Dependencies:**
    ```bash
-   pip install langchain langchain-openai langchain-chroma chromadb pypdf python-dotenv langchain-classic "sqlalchemy[asyncio]"
+   pip install ccxt pandas ta langchain-chroma langchain-openai langchain-core langchain-community pypdf python-dotenv requests streamlit plotly watchdog "sqlalchemy[asyncio]"
    ```
 
-4. **Environment Variables:**
-   Create a `.env` file in the root directory and add your OpenAI API key:
+3. **Environment Variables:**
+   Create a `.env` file in the root directory:
    ```text
-   OPENAI_API_KEY=sk-your-actual-api-key-here
+   OPENAI_API_KEY=your-openai-api-key
+   TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+   TELEGRAM_CHAT_ID=your-telegram-chat-id
    ```
 
 ## Building the Knowledge Base
 
-We use an **Incremental Indexing** script (`build_knowledge_base.py`). This ensures that if you add new books or backtest logs in the future, it only processes the new files, saving API costs and preventing duplicate data.
+We use an **Incremental Indexing** script (`build_knowledge_base.py`) to process PDF books without duplicating data.
 
-1. Create a directory for your source material:
-   ```bash
-   mkdir trading_books
-   ```
-2. Drop your PDF books (e.g., *Technical Analysis of the Financial Markets*) into the `trading_books` folder.
-3. Run the ingestion script:
+1. Create a directory named `trading_books` and drop your PDF books inside.
+2. Run the ingestion script:
    ```bash
    python build_knowledge_base.py
    ```
 
-**Output:**
-- `chroma_db/`: The folder containing your vector embeddings.
-- `record_manager.sql`: A local SQLite file that fingerprints chunks to prevent re-processing duplicates.
+## Running the Engine
 
-## Next Steps
+You can start the entire suite (Trading Engine + Streamlit Dashboard) with the included shell script:
 
-- Integrate `ccxt` to fetch live Binance/Bybit data.
-- Build the Telegram alerting function.
-- Implement the mathematical Risk Manager to calculate exact position sizes based on the AI's suggested stop-loss.
+```bash
+chmod +x run_all.sh
+./run_all.sh
+```
+
+- The trading agent runs in the background.
+- The interactive Streamlit dashboard is available at `http://localhost:8501`.
+- To safely stop the bot and dashboard, press `Ctrl+C`.
+
+## Database Management
+
+To clear the RAG knowledge base, experience database, or trade history, use the built-in database manager:
+
+```bash
+python db_manager.py
+```
+
+## Deployment
+
+For Ubuntu/Linux deployment, an `init.sh` script is provided which will install system dependencies, update the environment, and restart background services using `tmux`.

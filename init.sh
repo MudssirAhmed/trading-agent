@@ -48,7 +48,7 @@ if [ ! -d "venv" ]; then
 fi
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt 2>/dev/null || pip install ccxt pandas ta langchain-chroma langchain-openai langchain-core python-dotenv requests streamlit plotly watchdog
+pip install -r requirements.txt 2>/dev/null || pip install ccxt pandas ta langchain-chroma langchain-openai langchain-core langchain-community pypdf greenlet python-dotenv requests streamlit plotly watchdog
 
 if [ -f "run_all.sh" ]; then
     chmod +x run_all.sh

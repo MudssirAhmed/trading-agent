@@ -1,0 +1,19 @@
+# Python & Environment
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Vector Databases & SQLite State
+chroma_db/
+experience_db/
+record_manager.sql
+
+# Source PDFs / Training Books (Keep local only)
+trading_books/
+
+# Local Logs & CSVs
+trade_history.csv
+
+# macOS system files
+.DS_Store₹

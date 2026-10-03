@@ -31,3 +31,7 @@ plotly
 
 # Utilities
 requests
+
+# Database (required by langchain-classic SQLRecordManager)
+greenlet
+sqlalchemy[asyncio]

@@ -46,23 +46,42 @@ trap - EXIT
 
 echo -e "\n[5/6] Updating Python environment and packages..."
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    python3.11 -m venv venv
 fi
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-if [ -f "run_all.sh" ]; then
-    chmod +x run_all.sh
-fi
+chmod +x run_all.sh
 
 echo -e "\n[6/6] Restarting background bot services..."
-tmux kill-session -t bot 2>/dev/null || true
-# Use absolute path so tmux can locate run_all.sh regardless of its start directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-tmux new-session -d -s bot "bash $SCRIPT_DIR/run_all.sh"
+LOG_FILE="$SCRIPT_DIR/bot_startup.log"
 
-echo "=================================================="
-echo "✅ Setup and deployment complete."
-echo "=================================================="
-echo "To view live logs, run: tmux attach -t bot"
+# Kill any existing session
+tmux kill-session -t bot 2>/dev/null || true
+
+# Launch in tmux — redirect all output to a startup log so crashes are visible
+# '|| true' prevents set -e from killing this script if tmux exits immediately
+tmux new-session -d -s bot "bash $SCRIPT_DIR/run_all.sh > $LOG_FILE 2>&1" || true
+
+# Give the session 3 seconds to either stabilise or crash
+sleep 3
+
+# Check if session is actually alive
+if tmux has-session -t bot 2>/dev/null; then
+    echo "=================================================="
+    echo "✅ Setup and deployment complete."
+    echo "=================================================="
+    echo "Bot is running. To view live logs:"
+    echo "  tmux attach -t bot"
+    echo "  tail -f $LOG_FILE"
+else
+    echo "=================================================="
+    echo "❌ Bot session crashed on startup. Last log output:"
+    echo "=================================================="
+    cat "$LOG_FILE" 2>/dev/null || echo "(no log output captured)"
+    echo ""
+    echo "Fix the error above, then re-run: ./init.sh"
+    exit 1
+fi

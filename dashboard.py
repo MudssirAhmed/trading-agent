@@ -104,3 +104,14 @@ else:
         use_container_width=True,
         hide_index=True
     )
+
+st.markdown("---")
+st.subheader("🖥️ System Logs (Real-time)")
+if os.path.exists('engine.log'):
+    with open('engine.log', 'r') as log_file:
+        # Get the last 50 lines
+        lines = log_file.readlines()[-50:]
+        log_content = "".join(lines)
+        st.text_area("Latest engine.log", log_content, height=300, disabled=True)
+else:
+    st.info("No system logs generated yet.")

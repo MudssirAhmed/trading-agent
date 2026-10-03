@@ -2,12 +2,14 @@ import time
 import os
 import csv
 import json
+import traceback
 from datetime import datetime
 from dotenv import load_dotenv
 from data_fetcher import get_multi_timeframe_state
 from memory_manager import get_textbook_theory, get_past_experience, save_lesson_to_memory
 from ai_brain import generate_trade_decision, generate_reflection
 from notifier import send_telegram_alert
+from bot_logger import log_info, log_error, log_warning
 
 load_dotenv()
 
@@ -41,7 +43,6 @@ def log_trade_to_csv(trade_context, final_price, outcome_type):
     
     with open('trade_history.csv', mode='a', newline='') as file:
         writer = csv.writer(file)
-        # Write headers if the file is new
         if not file_exists:
             writer.writerow(['Date', 'Symbol', 'Action', 'Entry_Price', 'Exit_Price', 'Outcome', 'PnL_USD'])
             
@@ -61,7 +62,7 @@ def monitor_trade(current_price):
     if not active_trade:
         return False
         
-    print(f"[TRACKER] Open {active_trade['action']} | Price: ${current_price:,.2f} | SL: ${active_trade['stop_loss']:,.2f} | TP: ${active_trade['take_profit']:,.2f}")
+    log_info(f"[TRACKER] Open {active_trade['action']} | Price: ${current_price:,.2f} | SL: ${active_trade['stop_loss']:,.2f} | TP: ${active_trade['take_profit']:,.2f}", send_tg=False)
     
     outcome = None
     if active_trade['action'] == "LONG":
@@ -77,22 +78,16 @@ def monitor_trade(current_price):
             outcome = f"WIN. Take profit hit at ${current_price:,.2f}."
 
     if outcome:
-        print(f"\n[ALERT] Trade Closed! {outcome}")
+        log_info(f"[ALERT] Trade Closed! {outcome}", send_tg=True)
         
-        # Determine if it was a WIN or LOSS for the dashboard
         outcome_type = "WIN" if "WIN" in outcome else "LOSS"
-
-        # Log to the CSV dashboard file
         log_trade_to_csv(active_trade['context'], current_price, outcome_type)
 
-        # 1. Critic AI evaluates the trade
         lesson = generate_reflection(active_trade['context'], outcome)
-        print(f"[CRITIC] {lesson}")
+        log_info(f"[CRITIC] {lesson}", send_tg=True)
         
-        # 2. Save lesson to Experience DB
         save_lesson_to_memory(lesson, active_trade['context']['symbol'])
         
-        # 3. Notify via Telegram
         alert_body = (
             f"🔔 <b>TRADE CLOSED: {active_trade['action']}</b>\n"
             f"<b>Result:</b> {outcome}\n\n"
@@ -100,7 +95,6 @@ def monitor_trade(current_price):
         )
         send_telegram_alert(alert_body)
         
-        # 4. Clear trade state from memory and disk
         active_trade = None
         clear_active_trade()
         return True
@@ -109,35 +103,37 @@ def monitor_trade(current_price):
 
 def bot_loop():
     global active_trade
-    print("\n" + "="*40)
+    log_info("="*40, send_tg=False)
     
-    # 1. Ingest Data
-    state = get_multi_timeframe_state("BTC/USDT")
-    current_price = state['current_price']
-    
-    # 2. Check Open Trades
+    try:
+        state = get_multi_timeframe_state("BTC/USDT")
+        current_price = state['current_price']
+    except Exception as e:
+        log_error(f"Failed to fetch market data: {e}", send_tg=True)
+        return
+        
     if active_trade:
         monitor_trade(current_price)
         return
         
-    # 3. Translate Math to Semantic Search Query
     search_query = f"1D {state['macro_1D']['trend']}, 1H MACD {state['mid_1H']['macd']}, 5m RSI {state['micro_5m']['rsi']}"
     
-    # 4. Retrieve Knowledge
-    theory = get_textbook_theory(search_query)
-    experience = get_past_experience(search_query)
-    
-    # 5. Synthesize Decision
-    print("[BRAIN] Synthesizing MTFA data...")
+    try:
+        theory = get_textbook_theory(search_query)
+        experience = get_past_experience(search_query)
+    except Exception as e:
+        log_error(f"Failed to retrieve from ChromaDB: {e}", send_tg=True)
+        return
+        
+    log_info("[BRAIN] Synthesizing MTFA data...", send_tg=False)
     decision = generate_trade_decision(state, theory, experience)
     
     if decision:
-        print(f"\n[DECISION] {decision['action']} (Confidence: {decision['confidence']}%)")
-        print(f"[REASONING] {decision['reasoning']}")
+        log_info(f"[DECISION] {decision['action']} (Confidence: {decision['confidence']}%)", send_tg=True)
+        log_info(f"[REASONING] {decision['reasoning']}", send_tg=False)
         
-       # 6. Execute Alert
         if decision['action'] != "HOLD" and decision['confidence'] >= 85:
-            print(f"\n🚀 EXECUTING {decision['action']} ENTRY AT ${decision['entry_price']}")
+            log_info(f"🚀 EXECUTING {decision['action']} ENTRY AT ${decision['entry_price']}", send_tg=True)
             
             trade_msg = (
                 f"🚨 <b>AI TRADE SIGNAL: {decision['action']} BTC</b> 🚨\n\n"
@@ -159,12 +155,11 @@ def bot_loop():
                 "take_profit": decision['take_profit'],
                 "context": {"symbol": state['symbol'], "state": state, "decision": decision}
             }
-            
-            # Save trade state to disk immediately
             save_active_trade(active_trade)
+    else:
+        log_error("Failed to generate trade decision (JSON error)", send_tg=True)
 
 def startup_check():
-    """Checks for existing trades on boot and notifies Telegram."""
     global active_trade
     if os.path.exists(TRADE_FILE):
         try:
@@ -178,13 +173,15 @@ def startup_check():
                 f"Resuming monitoring..."
             )
             send_telegram_alert(recovery_msg)
-            print("⚠️ Recovered an ongoing trade from disk!")
+            log_warning("Recovered an ongoing trade from disk!", send_tg=True)
         except Exception as e:
-            print(f"Failed to load active trade: {e}")
+            log_error(f"Failed to load active trade: {e}", send_tg=True)
             active_trade = None
             send_telegram_alert("🤖 <b>AI Trading Engine Initialized.</b> Running multi-timeframe analysis every 5 minutes...")
+            log_info("AI Trading Engine Initialized.", send_tg=True)
     else:
         send_telegram_alert("🤖 <b>AI Trading Engine Initialized.</b> Running multi-timeframe analysis every 5 minutes...")
+        log_info("AI Trading Engine Initialized.", send_tg=True)
 
 if __name__ == "__main__":
     startup_check()
@@ -194,5 +191,5 @@ if __name__ == "__main__":
             bot_loop()
             time.sleep(300)
         except Exception as e:
-            print(f"Error in main loop: {e}")
+            log_error(f"Error in main loop: {e}\n{traceback.format_exc()}", send_tg=True)
             time.sleep(60)

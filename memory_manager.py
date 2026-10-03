@@ -3,6 +3,7 @@ load_dotenv()  # Must run before initializing OpenAIEmbeddings
 
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
+from bot_logger import log_info, log_error
 
 # Initialize embeddings once
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -13,17 +14,17 @@ experience_db = Chroma(persist_directory="./experience_db", embedding_function=e
 
 def get_textbook_theory(market_context_string):
     """Queries the trading books database."""
-    print("[MEMORY] Consulting trading books...")
+    log_info("[MEMORY] Consulting trading books...", send_tg=False)
     results = books_db.similarity_search(market_context_string, k=2)
     return "\n".join([doc.page_content for doc in results])
 
 def get_past_experience(market_context_string):
     """Queries the bot's past lessons learned."""
-    print("[MEMORY] Checking past experiences...")
+    log_info("[MEMORY] Checking past experiences...", send_tg=False)
     try:
         results = experience_db.similarity_search(market_context_string, k=2)
         return "\n".join([doc.page_content for doc in results]) if results else "No relevant past experience."
-    except Exception:
+    except Exception as e:
         return "Experience DB is currently empty."
 
 def save_lesson_to_memory(lesson_text, symbol):
@@ -32,4 +33,4 @@ def save_lesson_to_memory(lesson_text, symbol):
         texts=[lesson_text],
         metadatas=[{"symbol": symbol, "type": "trade_reflection"}]
     )
-    print(f"[MEMORY] Lesson permanently committed for {symbol}.")
+    log_info(f"[MEMORY] Lesson permanently committed for {symbol}.", send_tg=True)

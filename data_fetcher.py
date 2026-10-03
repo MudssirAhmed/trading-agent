@@ -2,6 +2,7 @@ import ccxt
 import pandas as pd
 import ta
 import time
+from bot_logger import log_info
 
 def fetch_dataframe(exchange, symbol, timeframe, limit):
     """Helper to fetch data and return a Pandas DataFrame."""
@@ -13,7 +14,7 @@ def fetch_dataframe(exchange, symbol, timeframe, limit):
 def get_multi_timeframe_state(symbol="BTC/USDT"):
     """Fetches 1D, 1H, 5m, and 1m data, applies indicators, and synthesizes a market state."""
     exchange = ccxt.binance()
-    print(f"[DATA] Fetching multi-timeframe data for {symbol}...")
+    log_info(f"[DATA] Fetching multi-timeframe data for {symbol}...", send_tg=False)
     
     # 1. Macro: 1D Chart (Trend Identification)
     df_1d = fetch_dataframe(exchange, symbol, '1d', limit=250)

@@ -4,6 +4,7 @@ load_dotenv()  # Must run before initializing ChatOpenAI
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from bot_logger import log_error
 
 # Initialize the LLM (Lower temperature for analytical consistency)
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
@@ -46,7 +47,7 @@ def generate_trade_decision(market_state, theory_context, experience_context):
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError:
-        print("[AI ERROR] Failed to parse JSON.")
+        log_error("[AI ERROR] Failed to parse JSON.", send_tg=True)
         return None
 
 def generate_reflection(trade_context, outcome):

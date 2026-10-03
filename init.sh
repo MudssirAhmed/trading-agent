@@ -50,7 +50,7 @@ if [ ! -d "venv" ]; then
 fi
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt 2>/dev/null || pip install ccxt pandas ta langchain-chroma langchain-openai langchain-core langchain-community pypdf greenlet python-dotenv requests streamlit plotly watchdog
+pip install -r requirements.txt
 
 if [ -f "run_all.sh" ]; then
     chmod +x run_all.sh
@@ -58,7 +58,9 @@ fi
 
 echo -e "\n[6/6] Restarting background bot services..."
 tmux kill-session -t bot 2>/dev/null || true
-tmux new-session -d -s bot "./run_all.sh"
+# Use absolute path so tmux can locate run_all.sh regardless of its start directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+tmux new-session -d -s bot "bash $SCRIPT_DIR/run_all.sh"
 
 echo "=================================================="
 echo "✅ Setup and deployment complete."

@@ -42,7 +42,7 @@ def log_trade_to_csv(trade_context, final_price, outcome_type):
     else:
         pnl_percent = (entry - final_price) / entry
 
-    estimated_pnl_dollars = 1000 * pnl_percent
+    estimated_pnl_dollars = 10_000 * pnl_percent
 
     with open('trade_history.csv', mode='a', newline='') as file:
         writer = csv.writer(file)

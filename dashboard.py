@@ -60,7 +60,7 @@ else:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Trades", total_trades)
     col2.metric("Win Rate", f"{win_rate:.1f}%")
-    col3.metric("Total PnL (Based on $1k pos)", f"${total_profit:,.2f}")
+    col3.metric("Total PnL (Based on $10k pos)", f"${total_profit:,.2f}")
     col4.metric("Active Pairs", df['Symbol'].nunique())
     
     st.markdown("---")

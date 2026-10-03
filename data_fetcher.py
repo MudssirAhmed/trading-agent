@@ -116,9 +116,10 @@ def get_multi_timeframe_state(symbol="BTC/USDT"):
     current_price = df_1m.iloc[-1]['close']
 
     # ── 5. Risk Sizing Guide (ATR-based) ─────────────────────────────────────
-    # Suggested SL = 1.5× ATR from entry, TP = 3× ATR (2:1 RR minimum)
-    suggested_sl_distance = round(atr_5m * 1.5, 2)
-    suggested_tp_distance = round(atr_5m * 3.0, 2)
+    # SL = 2× ATR (enough room beyond noise), TP = 5× ATR (2.5:1 RR minimum)
+    # Using 1H ATR for SL/TP — more stable than 5m ATR which can be very small
+    suggested_sl_distance = round(atr_1h * 2.0, 2)
+    suggested_tp_distance = round(atr_1h * 5.0, 2)
 
     log_info(
         f"[DATA] Price=${current_price:,.2f} | Trend={macro_trend} ADX={adx_value} | "

@@ -20,8 +20,7 @@ llm_pro  = ChatOpenAI(model=MODEL_DECISION,  temperature=0.05)
 # ── Trade Decision: Stage 1 (Pre-Screen) ─────────────────────────────────────
 
 _PRESCREEN_TEMPLATE = """You are a strict quantitative trading pre-screener. 
-Your ONLY job is to score the current setup on a 0-100 scale and recommend whether it 
-deserves a full deep analysis. You do NOT trade — you just score.
+Your ONLY job is to score the current setup and recommend whether it deserves full deep analysis.
 
 CURRENT MARKET STATE (enriched):
 {state}
@@ -38,19 +37,25 @@ MOMENTUM_SCORE (0 or 1):
 
 MICRO_SCORE (0 or 1):
   - 5m RSI is not in extreme territory against the trade direction (not >75 for LONG entry, not <25 for SHORT entry), AND
-  - Volume ratio >= 1.0 (participation is present)
+  - Volume ratio >= 0.5 (some participation is present — avoids completely dead markets)
 
 VETO CONDITIONS (any = immediate HOLD):
   - 1D trend is Bearish AND planning a LONG
   - 1D trend is Bullish AND planning a SHORT
   - ADX < 15 (no trend at all)
   - RSI Divergence detected (unless specifically trading reversals)
-  - Volume ratio < 0.5 (dead volume, fakeout risk)
+  - Volume ratio < 0.3 (extremely dead volume, high fakeout risk)
 
-OUTPUT STRICT JSON ONLY:
-{{"macro_score": 0_or_1, "momentum_score": 0_or_1, "micro_score": 0_or_1, "total": 0_to_3, "veto": true_or_false, "veto_reason": "string_or_null", "proceed_to_deep_analysis": true_or_false, "preliminary_bias": "LONG|SHORT|HOLD"}}
+OUTPUT STRICT JSON ONLY — no explanation outside the JSON:
+{{"macro_score": 0, "momentum_score": 0, "micro_score": 0, "total": 0, "confidence": 0, "veto": false, "veto_reason": null, "proceed_to_deep_analysis": false, "preliminary_bias": "HOLD"}}
 
-RULES: proceed_to_deep_analysis = true ONLY when total >= 2 AND veto == false.
+FIELD RULES:
+- total = macro_score + momentum_score + micro_score (0 to 3)
+- confidence = integer 0-100 reflecting how well the FULL setup aligns with all scoring criteria.
+  Output this for EVERY decision including HOLD — it tells us how close the setup was.
+  Examples: veto on volume only → ~35. All 3 scores pass → ~80+. Complete misalignment → ~10.
+- proceed_to_deep_analysis = true ONLY when total >= 2 AND veto == false.
+- preliminary_bias = LONG if bullish signals dominate, SHORT if bearish, HOLD if unclear/blocked.
 """
 
 # ── Trade Decision: Stage 2 (Deep Analysis) ──────────────────────────────────
@@ -111,7 +116,7 @@ STEP 5 — EXPERIENCE SYNTHESIS:
   Quote the most relevant lesson. Adjust confidence accordingly.
 
 STEP 6 — RISK MANAGEMENT:
-  The market suggests SL distance = {sl_distance} (1.5× ATR) and TP distance = {tp_distance} (3.0× ATR).
+  The market suggests SL distance = {sl_distance} (1.5x ATR) and TP distance = {tp_distance} (3.0x ATR).
   Compute entry_price, stop_loss, and take_profit using these distances from current price {current_price}.
   Ensure Risk:Reward >= 2:1 always.
 
@@ -173,8 +178,9 @@ def generate_trade_decision(market_state: dict, theory_context: str, experience_
     """
     Two-stage decision pipeline:
     Stage 1: gpt-4o-mini pre-screens the setup cheaply (runs every 5min cycle).
+             Always returns a real confidence score — even for HOLD.
     Stage 2: gpt-4o performs deep chain-of-thought analysis ONLY when setup passes pre-screen.
-    
+
     Returns the full decision dict, or None on failure.
     """
     state_json = json.dumps(market_state, indent=2)
@@ -192,8 +198,12 @@ def generate_trade_decision(market_state: dict, theory_context: str, experience_
         log_error("[BRAIN] Pre-screen JSON parse failed.", send_tg=True)
         return None
 
+    # Pull the LLM-assigned confidence (replaces the old hardcoded 0)
+    prescreen_confidence = prescreen.get("confidence", 0)
+
     log_info(
         f"[BRAIN] Pre-screen → Total: {prescreen.get('total')}/3 | "
+        f"Confidence: {prescreen_confidence}% | "
         f"Veto: {prescreen.get('veto')} | Bias: {prescreen.get('preliminary_bias')}",
         send_tg=False
     )
@@ -202,11 +212,11 @@ def generate_trade_decision(market_state: dict, theory_context: str, experience_
         log_info(f"[BRAIN] VETO triggered: {prescreen.get('veto_reason')} → HOLD", send_tg=False)
         return {
             "action": "HOLD",
-            "confidence": 0,
+            "confidence": prescreen_confidence,   # real LLM value, not hardcoded 0
             "entry_price": market_state.get("current_price", 0),
             "stop_loss": 0,
             "take_profit": 0,
-            "risk_reward_ratio": 0,
+            "risk_reward_ratio": 0,               # no trade = no RR
             "theory_cited": "None",
             "experience_cited": "None",
             "reasoning": f"Veto: {prescreen.get('veto_reason', 'Setup does not meet minimum criteria.')}"
@@ -219,11 +229,11 @@ def generate_trade_decision(market_state: dict, theory_context: str, experience_
         )
         return {
             "action": "HOLD",
-            "confidence": 0,
+            "confidence": prescreen_confidence,   # real LLM value, not hardcoded 0
             "entry_price": market_state.get("current_price", 0),
             "stop_loss": 0,
             "take_profit": 0,
-            "risk_reward_ratio": 0,
+            "risk_reward_ratio": 0,               # no trade = no RR
             "theory_cited": "None",
             "experience_cited": "None",
             "reasoning": f"Pre-screen score {prescreen.get('total')}/3 — insufficient signal alignment."
@@ -231,7 +241,7 @@ def generate_trade_decision(market_state: dict, theory_context: str, experience_
 
     # ── Stage 2: Deep analysis (gpt-4o) ──────────────────────────────────────
     log_info("[BRAIN] Stage 2: Running deep analysis with gpt-4o...", send_tg=False)
-    risk = market_state.get("risk_sizing", {})
+    risk  = market_state.get("risk_sizing", {})
     micro = market_state.get("micro_5m", {})
 
     deep_prompt = PromptTemplate(
